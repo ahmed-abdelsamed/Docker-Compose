@@ -1,0 +1,189 @@
+version: '3.8'
+
+services: 
+    # NodeJs Application Service
+    stt-app:
+      container_name: stt-app
+      depends_on:
+        - db
+      build: ./
+      restart: always
+      env_file: ./.env
+      environment:
+        - DB_HOST=${DB_HOST}
+        - DB_USER=${DB_USER}
+        - DB_PASSWORD=${DB_PASSWORD}
+        - DB_NAME=${DB_NAME}
+        - DB_PORT=${DB_PORT}
+      stdin_open: true
+      tty: true
+      volumes:
+        - type: bind
+          source: /stt
+          target: /stt
+      networks:
+        - stt-network
+    
+    # Nginx Service
+    webserver:
+      image: nginx:alpine
+      container_name: stt-webserver
+      restart: always
+      tty: true
+      ports:
+        - "88:80"
+        - "443:443"
+      volumes:
+        - ./:/var/www/html
+        - ./docker-images-conf/nginx/:/etc/nginx/conf.d/
+      depends_on:
+        - stt-app
+      networks:
+        - stt-network
+    
+    # MySQL Service
+    db:
+      image: mysql:8.0
+      container_name: stt-db
+      restart: always
+      tty: true
+      environment:
+        MYSQL_ROOT_PASSWORD: $DB_PASSWORD
+        MYSQL_DATABASE: $DB_NAME
+        MYSQL_USER: $DB_USER
+        MYSQL_PASSWORD: $DB_PASSWORD
+        MYSQL_ROOT_HOST: '%'  # needs to be enclosed with quotes
+      command: "--max_allowed_packet=32505856 --default-authentication-plugin=mysql_native_password"
+      ports:
+        - ${DB_DOCKER_PORT}:${DB_PORT}
+      volumes:
+        - ~/dbdata:/var/lib/mysql/
+      networks:
+        - stt-network
+
+    # PhpMyAdmin Service
+    pma:
+      image: phpmyadmin/phpmyadmin:latest
+      container_name: stt-phpmyadmin
+      restart: always
+      ports:
+        - 81:80
+      environment:
+        - PMA_HOST=${DB_HOST}
+        - PMA_PORT=${DB_PORT}
+      depends_on:
+        - db
+      links:
+        - db
+      networks:
+        - stt-network
+
+    # Azure Cognitive Service (Speech to Text)
+    speech-to-text:
+      container_name: stt-container
+      restart: always
+      image: mcr.microsoft.com/azure-cognitive-services/speechservices/custom-speech-to-text
+      environment:
+        - Eula=accept
+        - Mounts:License=/license
+        - Mounts:Output=/output
+      ports:
+        - 5000:5000
+      volumes:
+        - type: bind
+          source: /home/ubuntu/csst/license
+          target: /license
+        - type: bind
+          source: /home/ubuntu/csst/output
+          target: /output
+        - type: bind
+          source: /home/ubuntu/csst/model
+          target: /usr/local/models
+      mem_limit: 8g
+      stdin_open: true
+      tty: true    
+      deploy:
+        resources:
+          limits:
+            cpus: '4'
+            memory: 8g
+      networks:
+         - stt-network
+
+    # stt:
+    #   container_name: stt-container
+    #   restart: always
+    #   # image: mcr.microsoft.com/azure-cognitive-services/speechservices/custom-speech-to-text:latest # custom
+    #   image: mcr.microsoft.com/azure-cognitive-services/speechservices/speech-to-text:3.9.0-amd64-ar-sa # standard
+    #   ports:
+    #     - 5000:5000
+    #   command:
+    #     - Eula=accept
+    #     - Billing=${SPEECH_CONTAINER_BILLING}
+    #     - ApiKey=${SPEECH_KEY}
+    #     # - ModelId=${CUSTOM_MODEL_ID} # Custom Model
+    #     - Logging:Disk:Format=json
+    #     - Mounts:Output=/home/ubuntu/output
+    #     - cpus:4
+    #   mem_limit: 8g
+    #   stdin_open: true
+    #   tty: true
+    #   volumes:
+    #     # - /home/ubuntu/models:/usr/local/models # Custom Model
+    #     - type: bind
+    #       source: /home/ubuntu/output
+    #       target: /home/ubuntu/output
+    #   deploy:
+    #     resources:
+    #       limits:
+    #         cpus: '4'
+    #         memory: 8g
+    #       reservations:
+    #         cpus: '4'
+    #         memory: 4g    
+    #   networks:
+    #     - stt-network
+
+    # stt1:
+    #   container_name: stt-container-1
+    #   restart: always
+    #   # image: mcr.microsoft.com/azure-cognitive-services/speechservices/custom-speech-to-text:latest # custom
+    #   image: mcr.microsoft.com/azure-cognitive-services/speechservices/speech-to-text:3.9.0-amd64-ar-sa # standard
+    #   ports:
+    #     - 5001:5000
+    #   command:
+    #     - Eula=accept
+    #     - Billing=${SPEECH_CONTAINER_BILLING}
+    #     - ApiKey=${SPEECH_KEY}
+    #     # - ModelId=${CUSTOM_MODEL_ID} # Custom Model
+    #     - Logging:Disk:Format=json
+    #     - Mounts:Output=/home/ubuntu/output
+    #     - cpus:4
+    #   mem_limit: 8g
+    #   stdin_open: true
+    #   tty: true
+    #   volumes:
+    #     # - /home/ubuntu/models:/usr/local/models # Custom Model
+    #     - type: bind
+    #       source: /home/ubuntu/output
+    #       target: /home/ubuntu/output
+    #   deploy:
+    #     resources:
+    #       limits:
+    #         cpus: '4'
+    #         memory: 8g
+    #       reservations:
+    #         cpus: '4'
+    #         memory: 4g    
+    #   networks:
+    #     - stt-network
+
+# Docker Networks
+networks:
+  stt-network:
+    driver: bridge
+
+# Volumes
+volumes:
+  dbdata:
+    driver: local
