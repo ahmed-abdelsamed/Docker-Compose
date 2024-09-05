@@ -16,3 +16,14 @@ chmod +x /usr/local/bin/docker-compose
 usermod -aG docker username
 
 docker run hello-world
+
+## ### Docker compose offline install
+sudo yum install -y yum-utils
+
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+sudo yum install --downloadonly --downloaddir rpms/ docker-ce docker-ce-cli containerd.io
+
+sudo dnf install rpms/*.rpm --disablerepo '*'
+
+sudo systemctl enable --now docker
